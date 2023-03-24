@@ -550,6 +550,9 @@ class EdgeReader(osmium.SimpleHandler):
         self.edges_df = edges
 
     def write_edges(self, filename):
+        dirname = os.path.dirname(filename)
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
         self.edges_df.to_file(filename, driver="FlatGeobuf")
 
 
