@@ -16,9 +16,9 @@ TRIPS_FILE = "./data/synthetic_population/ile_de_france_trips.csv"
 # (available values: car, car_passenger, pt, walk, bike).
 MODES = ("car", "car_passenger", "pt", "walk", "bike")
 # Returns only trips whose departure time is later than this value (in seconds after midnight).
-START_TIME = 3.0 * 3600.0
+START_TIME = 0.0 * 3600.0
 # Returns only trips whose arrival time is earlier than this value (in seconds after midnight).
-END_TIME = 10.0 * 3600.0
+END_TIME = 30.0 * 3600.0
 
 # Path to the FlatGeobuf file where edges are stored.
 EDGE_FILE = "./output/osm_network/osm_edges.fgb"

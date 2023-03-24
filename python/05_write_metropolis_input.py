@@ -4,7 +4,6 @@ import json
 
 import numpy as np
 import pandas as pd
-import geopandas as gpd
 
 # Path to the FlatGeobuf file where edges are stored.
 EDGE_FILE = "./output/osm_network/osm_edges.fgb"
