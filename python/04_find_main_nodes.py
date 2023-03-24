@@ -135,7 +135,7 @@ def find_connections(results, edges):
     counts.name = 'count'
 
     print("Put trips that never use the main network on the side")
-    no_main_trips = results.loc[results["first"].isna()]
+    no_main_trips = results.loc[results["first"].isna()].copy()
     print("There are {} trips not using the main network".format(len(no_main_trips)))
     results = results.loc[~results["first"].isna()].copy()
     assert results["last"].isna().sum() == 0
