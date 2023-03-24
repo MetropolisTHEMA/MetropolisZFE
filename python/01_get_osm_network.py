@@ -481,21 +481,6 @@ class EdgeReader(osmium.SimpleHandler):
 
         print("Finding parallel edges")
 
-        # Removing duplicate edges.
-        st_count = edges.value_counts(subset=["source", "target"])
-        to_remove = set()
-        for s, t in st_count.loc[st_count > 1].index:
-            dupl = edges.loc[(edges["source"] == s) & (edges["target"] == t)]
-            # Keep only the edge with the smallest travel time.
-            tt = dupl["length"] / (dupl["speed"] / 3.6)
-            id_min = tt.index[tt.argmin()]
-            for i in dupl.index:
-                if i != id_min:
-                    to_remove.add(i)
-        if to_remove:
-            print("Warning. Removing {} duplicate edges.".format(len(to_remove)))
-            edges.drop(labels=to_remove, inplace=True)
-
         # Flag the highways that we want to keep in the final graph.
         main_highways = list(map(lambda h: ROADTYPE_TO_ID[h], MAIN_HIGHWAYS))
         edges["main_graph"] = edges["road_type"].isin(main_highways)
@@ -521,6 +506,34 @@ class EdgeReader(osmium.SimpleHandler):
         edges = edges.merge(default_speeds, left_on="road_type", right_index=True, how="left")
         edges.loc[edges["speed"].isna() & edges["urban"], "speed"] = edges["urban_speed"]
         edges.loc[edges["speed"].isna() & ~edges["urban"], "speed"] = edges["rural_speed"]
+
+        # Removing duplicate edges.
+        st_count = edges.value_counts(subset=["source", "target"])
+        to_remove = list()
+        for s, t in st_count.loc[st_count > 1].index:
+            dupl = edges.loc[(edges["source"] == s) & (edges["target"] == t)]
+            # Keep in priority (i) main graph edge, (ii) largest capacity edge, (iii) smallest
+            # free-flow travel time edge.
+            nb_mains = dupl.loc['main_graph'].sum()
+            nb_secondary = len(dupl) - nb_mains
+            indices = list()
+            if nb_mains == 1:
+                indices.extend(dupl.loc[~dupl["main_graph"]].index)
+            else:
+                if nb_mains > 0 and nb_secondary > 0:
+                    indices.extend(dupl.loc[~dupl["main_graph"]].index)
+                    dupl = dupl.loc[dupl["main_graph"]].copy()
+                max_capacity = dupl['capacity'].max()
+                indices.extend(dupl.loc[dupl['capacity'] < max_capacity].index)
+                dupl = dupl.loc[dupl['capacity'] == max_capacity].copy()
+                if len(dupl) > 1:
+                    tt = dupl["length"] / (dupl["speed"] / 3.6)
+                    id_min = tt.index[tt.argmin()]
+                    indices.extend(dupl.loc[dupl.index != id_min].index)
+            to_remove.extend(indices)
+        if to_remove:
+            print("Warning. Removing {} duplicate edges.".format(len(to_remove)))
+            edges.drop(labels=to_remove, inplace=True)
 
         # Add a column for the indices of the edges (in the full network).
         edges.reset_index(inplace=True, drop=True)
