@@ -1,3 +1,4 @@
+import os
 import time
 
 import pandas as pd
@@ -147,6 +148,9 @@ if __name__ == "__main__":
     if nb_removed > 0:
         print("Warning: removed {} round trips (same origin and destination)".format(nb_removed))
 
+    dirname = os.path.dirname(OUTPUT_FILE)
+    if not os.path.isdir(dirname):
+        os.makedirs(dirname)
     trips.to_csv(OUTPUT_FILE, index=False)
 
     t = time.time() - t0
