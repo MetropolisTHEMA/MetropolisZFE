@@ -514,7 +514,7 @@ class EdgeReader(osmium.SimpleHandler):
             dupl = edges.loc[(edges["source"] == s) & (edges["target"] == t)]
             # Keep in priority (i) main graph edge, (ii) largest capacity edge, (iii) smallest
             # free-flow travel time edge.
-            nb_mains = dupl.loc['main_graph'].sum()
+            nb_mains = dupl["main_graph"].sum()
             nb_secondary = len(dupl) - nb_mains
             indices = list()
             if nb_mains == 1:
@@ -523,9 +523,9 @@ class EdgeReader(osmium.SimpleHandler):
                 if nb_mains > 0 and nb_secondary > 0:
                     indices.extend(dupl.loc[~dupl["main_graph"]].index)
                     dupl = dupl.loc[dupl["main_graph"]].copy()
-                max_capacity = dupl['capacity'].max()
-                indices.extend(dupl.loc[dupl['capacity'] < max_capacity].index)
-                dupl = dupl.loc[dupl['capacity'] == max_capacity].copy()
+                max_capacity = dupl["capacity"].max()
+                indices.extend(dupl.loc[dupl["capacity"] < max_capacity].index)
+                dupl = dupl.loc[dupl["capacity"] == max_capacity].copy()
                 if len(dupl) > 1:
                     tt = dupl["length"] / (dupl["speed"] / 3.6)
                     id_min = tt.index[tt.argmin()]
