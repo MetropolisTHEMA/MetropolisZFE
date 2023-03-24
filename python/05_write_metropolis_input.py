@@ -147,6 +147,8 @@ def generate_agents(trips):
     random_u = iter(RNG.uniform(size=len(trips)))
     agents = list()
     nb_persons = trips["person_id"].nunique()
+    origins = set()
+    destinations = set()
     for i, (person_id, idx) in enumerate(trips.groupby("person_id").groups.items()):
         legs = list()
         for _, trip in trips.loc[idx].iterrows():
@@ -155,12 +157,16 @@ def generate_agents(trips):
             t_star = T_STAR_FUNC(trip["arrival_time"]) - trip["destination_delay"]
 
             if trip["road_leg"]:
+                origin = int(trip["O_node"])
+                destination = int(trip["D_node"])
+                origins.add(origin)
+                destinations.add(destination)
                 leg = {
                     "class": {
                         "type": "Road",
                         "value": {
-                            "origin": int(trip["O_node"]),
-                            "destination": int(trip["D_node"]),
+                            "origin": origin,
+                            "destination": destination,
                             "vehicle": 0,
                         },
                     }
@@ -219,7 +225,13 @@ def generate_agents(trips):
             "modes": [car_mode],
         }
         agents.append(agent)
-    print("\n Done !")
+    print(
+        "\nGenerated {} agents, with {} legs ({} being road legs)".format(
+            len(agents), len(trips), trips["road_leg"].sum()
+        )
+    )
+    print("Number of unique origins: {}".format(len(origins)))
+    print("Number of unique destinations: {}".format(len(destinations)))
     return agents
 
 
@@ -252,7 +264,7 @@ if __name__ == "__main__":
 
     #  print("Writing road network")
     #  with open(os.path.join(OUTPUT_DIR, "network.json"), "w") as f:
-        #  f.write(json.dumps(road_network))
+    #  f.write(json.dumps(road_network))
 
     t = time.time() - t0
     print("Total running time: {:.2f} seconds".format(t))
