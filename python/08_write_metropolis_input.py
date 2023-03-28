@@ -78,6 +78,14 @@ PARAMETERS = {
 }
 
 
+def read_edges():
+    print("Reading edges")
+    edges = gpd.read_file(EDGE_FILE)
+    edges = edges.loc[edges["main"]].copy()
+    edges.sort_values("index_main", inplace=True)
+    return edges
+
+
 def read_trips():
     print("Reading trips")
     trips = pd.read_csv(TRIPS_FILE)
@@ -89,19 +97,9 @@ def read_trips():
     return trips
 
 
-def get_zfe_nodes(edges):
-    # A node is said to be in the ZFE if it has at least one incoming or outgoing edge that is
-    # inside the ZFE.
-    sources = set(edges.loc[edges["main"] & edges["zfe"], "source"])
-    targets = set(edges.loc[edges["main"] & edges["zfe"], "target"])
-    return sources.union(targets)
-
-
 def generate_road_network(edges):
     print("Creating Metropolis road network")
     metro_edges = list()
-    edges = edges.loc[edges["main"]].copy()
-    edges.sort_values("index_main", inplace=True)
     for _, row in edges.iterrows():
         edge = [
             row["source"],
@@ -158,7 +156,7 @@ def generate_road_network(edges):
     return road_network
 
 
-def generate_agents(trips, zfe_nodes):
+def generate_agents(trips):
     trips.sort_values(["person_id", "trip_index"], inplace=True)
     trips["is_first"] = trips["trip_id"].isin(trips.groupby("person_id")["trip_id"].first())
     trips["is_last"] = trips["trip_id"].isin(trips.groupby("person_id")["trip_id"].last())
@@ -189,12 +187,7 @@ def generate_agents(trips, zfe_nodes):
                 destination = int(trip["D_node"])
                 origins.add(origin)
                 destinations.add(destination)
-                if (
-                    ZFE
-                    and trip["critair"] in INVALID_CRITAIRS
-                    and origin not in zfe_nodes
-                    and destination not in zfe_nodes
-                ):
+                if ZFE and trip["is_feasible"] and trip["critair"] in INVALID_CRITAIRS:
                     vehicle_id = 1
                 else:
                     vehicle_id = 0
@@ -284,13 +277,11 @@ if __name__ == "__main__":
         f.write(json.dumps(PARAMETERS))
 
     print("Reading edges")
-    edges = gpd.read_file(EDGE_FILE)
-
-    zfe_nodes = get_zfe_nodes(edges)
+    edges = read_edges()
 
     trips = read_trips()
 
-    agents = generate_agents(trips, zfe_nodes)
+    agents = generate_agents(trips)
     del trips
 
     print("Writing agents")
