@@ -3,15 +3,15 @@ import pandas as pd
 import geopandas as gpd
 
 # Path to the file where the trips to simulate are stored.
-TRIP_FILE = "./output/trips/trips_filtered.csv"
+TRIP_FILE = "./output/trips/trips.csv"
 # Path to the file where the Commune-level vehicles types are stored.
 VEHICLE_FILE = "./data/parc/Parc_VP_Communes_2021.xlsx"
 # Path to the file with the Commune geometries.
 COMMUNE_FILE = "./data/contours_communes/communes-20210101.shp"
-# Path to the file with the IRIS data.
-IRIS_FILE = "./data/contours_iris_france/CONTOURS-IRIS.shp"
 # Crit'air labels which are forbidden in the ZFE.
 INVALID_CRITAIRS = ("Crit'air 4", "Crit'air 5", "Inconnu", "Non classée")
+# CRS to use for metric operations.
+METRIC_CRS = "EPSG:2154"
 
 # Path to the file where the output communes FlatGeobuf with invalid shares should be stored.
 OUTPUT_COMMUNE = "./output/communes_invalid_share.fgb"
@@ -34,33 +34,31 @@ invalid_share = (
     / vehicles.groupby("Code commune")["Parc au 01/01/2021"].sum()
 )
 invalid_share.name = "invalid_share"
-# Save a FlatGeobuf with the communes geometries and the invalid share.
+
+print("Reading communes...")
 communes = gpd.read_file(COMMUNE_FILE)
 communes.drop(columns=["wikipedia", "surf_ha"], inplace=True)
+communes.to_crs(METRIC_CRS, inplace=True)
+
+# Save a FlatGeobuf with the communes geometries and the invalid share.
 gdf = communes.merge(invalid_share, left_on="insee", right_index=True, how="right")
 gdf.to_file(OUTPUT_COMMUNE, driver="FlatGeobuf")
 
-print("Reading IRIS...")
-iris = gpd.read_file(IRIS_FILE)
-# Manage Paris.
-iris.loc[iris["INSEE_COM"].str.startswith("75"), "INSEE_COM"] = "75056"
-iris = iris.loc[iris["INSEE_COM"].isin(vehicles["Code commune"])].copy()
-iris = iris[["INSEE_COM", "CODE_IRIS"]].copy()
-iris["CODE_IRIS"] = iris["CODE_IRIS"].astype(int)
-
 print("Reading trips...")
 trips = pd.read_csv(TRIP_FILE)
-trips = trips.merge(iris, left_on="iris_origin", right_on="CODE_IRIS").drop(columns="CODE_IRIS")
-trips = trips.merge(
-    iris, left_on="iris_destination", right_on="CODE_IRIS", suffixes=("_origin", "_destination")
-).drop(columns="CODE_IRIS")
 trips.sort_values(["person_id", "trip_index"], inplace=True)
 
-homes = trips.groupby("person_id")["INSEE_COM_origin"].first().reset_index()
+print("Finding INSEE commune of origin...")
+homes = trips.groupby("person_id")[["x0", "y0"]].first().reset_index()
+homes = gpd.GeoDataFrame(homes, geometry=gpd.GeoSeries.from_xy(homes['x0'], homes['y0']))
+homes.set_crs(METRIC_CRS, inplace=True)
+homes = homes.sjoin(communes, how='left', predicate='within')
+homes = homes.groupby('person_id')['insee'].first().reset_index()
+
 homes["critair"] = None
 
 print("Drawing vehicles...")
-for insee_code, idx in homes.groupby("INSEE_COM_origin").groups.items():
+for insee_code, idx in homes.groupby("insee").groups.items():
     persons = homes.loc[idx]
     vehicle_pool = vehicles.loc[
         vehicles["Code commune"] == insee_code, ["Vignette Crit'air", "Parc au 01/01/2021"]
