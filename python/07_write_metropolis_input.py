@@ -4,6 +4,7 @@ import json
 
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 
 # Path to the FlatGeobuf file where edges are stored.
 EDGE_FILE = "./output/osm_network/osm_edges.fgb"
@@ -37,6 +38,12 @@ DT_MU = 3.0
 # How t* is computed given the observed arrival time.
 def T_STAR_FUNC(ta):
     return ta
+
+
+# If True, restrict polluting vehicles from entering the ZFE.
+ZFE = True
+# Crit'air labels which are forbidden in the ZFE.
+INVALID_CRITAIRS = ("Crit'air 4", "Crit'air 5", "Inconnu", "Non classée")
 
 
 # Seed for the random number generators.
@@ -82,6 +89,14 @@ def read_trips():
     return trips
 
 
+def get_zfe_nodes(edges):
+    # A node is said to be in the ZFE if it has at least one incoming or outgoing edge that is
+    # inside the ZFE.
+    sources = set(edges.loc[edges["main"] & edges["zfe"], "source"])
+    targets = set(edges.loc[edges["main"] & edges["zfe"], "target"])
+    return sources.union(targets)
+
+
 def generate_road_network(edges):
     print("Creating Metropolis road network")
     metro_edges = list()
@@ -119,8 +134,22 @@ def generate_road_network(edges):
             "speed_function": {
                 "type": "Base",
             },
-        }
+        },
     ]
+
+    if ZFE:
+        # Add a second vehicle representing the restricted vehicles.
+        zfe_edges = list(edges.loc[edges["zfe"], "index_main"])
+        vehicles.append(
+            {
+                "length": VEHICLE_LENGTH,
+                "pce": VEHICLE_PCE,
+                "speed_function": {
+                    "type": "Base",
+                },
+                "restricted_edges": zfe_edges,
+            }
+        )
 
     road_network = {
         "graph": graph,
@@ -129,7 +158,7 @@ def generate_road_network(edges):
     return road_network
 
 
-def generate_agents(trips):
+def generate_agents(trips, zfe_nodes):
     trips.sort_values(["person_id", "trip_index"], inplace=True)
     trips["is_first"] = trips["trip_id"].isin(trips.groupby("person_id")["trip_id"].first())
     trips["is_last"] = trips["trip_id"].isin(trips.groupby("person_id")["trip_id"].last())
@@ -160,13 +189,22 @@ def generate_agents(trips):
                 destination = int(trip["D_node"])
                 origins.add(origin)
                 destinations.add(destination)
+                if (
+                    ZFE
+                    and trip["critair"] in INVALID_CRITAIRS
+                    and origin not in zfe_nodes
+                    and destination not in zfe_nodes
+                ):
+                    vehicle_id = 1
+                else:
+                    vehicle_id = 0
                 leg = {
                     "class": {
                         "type": "Road",
                         "value": {
                             "origin": origin,
                             "destination": destination,
-                            "vehicle": 0,
+                            "vehicle": vehicle_id,
                         },
                     }
                 }
@@ -245,9 +283,14 @@ if __name__ == "__main__":
     with open(os.path.join(OUTPUT_DIR, "parameters.json"), "w") as f:
         f.write(json.dumps(PARAMETERS))
 
+    print("Reading edges")
+    edges = gpd.read_file(EDGE_FILE)
+
+    zfe_nodes = get_zfe_nodes(edges)
+
     trips = read_trips()
 
-    agents = generate_agents(trips)
+    agents = generate_agents(trips, zfe_nodes)
     del trips
 
     print("Writing agents")
@@ -255,15 +298,12 @@ if __name__ == "__main__":
         f.write(json.dumps(agents))
     del agents
 
-    #  print("Reading edges")
-    #  edges = gpd.read_file(EDGE_FILE)
+    road_network = generate_road_network(edges)
+    del edges
 
-    #  road_network = generate_road_network(edges)
-    #  del edges
-
-    #  print("Writing road network")
-    #  with open(os.path.join(OUTPUT_DIR, "network.json"), "w") as f:
-    #  f.write(json.dumps(road_network))
+    print("Writing road network")
+    with open(os.path.join(OUTPUT_DIR, "network.json"), "w") as f:
+        f.write(json.dumps(road_network))
 
     t = time.time() - t0
     print("Total running time: {:.2f} seconds".format(t))
