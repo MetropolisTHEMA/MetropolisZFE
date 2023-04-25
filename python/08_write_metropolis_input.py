@@ -276,7 +276,6 @@ if __name__ == "__main__":
     with open(os.path.join(OUTPUT_DIR, "parameters.json"), "w") as f:
         f.write(json.dumps(PARAMETERS))
 
-    print("Reading edges")
     edges = read_edges()
 
     trips = read_trips()
