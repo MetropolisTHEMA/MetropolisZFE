@@ -31,17 +31,23 @@ BETA = 7.5
 GAMMA = 30.0
 # Time window for on-time arrival, in seconds.
 DELTA = 0.0
-# If True, departure time is endogenous.
-ENDOGENOUS_DEPARTURE_TIME = True
-# Value of μ for the departure-time model (if ENDOGENOUS_DEPARTURE_TIME is True).
+# "Continuous": Continuous Logit.
+# "Discrete": Multinomial Logit model (with fixed epsilons).
+# "Exogenous": The departure time from synthetic population is used.
+DEPARTURE_TIME_MODEL = "Discrete"
+# Value of μ for the departure-time model (if DEPARTURE_TIME_MODEL is not "Exogenous").
 DT_MU = 3.0
+# Width of the departure-time choice intervals (for DEPARTURE_TIME_MODEL "Discrete" only).
+DT_WIDTH = 5.0 * 60.0
+# Bins of the departure-time choice intervals (for DEPARTURE_TIME_MODEL "Discrete" only).
+DT_BINS = list(np.arange(PERIOD[0] + DT_WIDTH / 2, PERIOD[1], DT_WIDTH))
 # How t* is computed given the observed arrival time.
 def T_STAR_FUNC(ta):
     return ta
 
 
 # If True, restrict polluting vehicles from entering the ZFE.
-ZFE = True
+ZFE = False
 # Crit'air labels which are forbidden in the ZFE.
 INVALID_CRITAIRS = ("Crit'air 4", "Crit'air 5", "Inconnu", "Non classée")
 
@@ -223,7 +229,7 @@ def generate_agents(trips):
                 leg = {"class": {"type": "Virtual", "value": trip["travel_time"]}}
                 leg["stopping_time"] = trip["stopping_time"] + trip["next_origin_delay"]
             legs.append(leg)
-        if ENDOGENOUS_DEPARTURE_TIME:
+        if DEPARTURE_TIME_MODEL == "Continuous":
             departure_time_model = {
                 "type": "ContinuousChoice",
                 "value": {
@@ -235,6 +241,21 @@ def generate_agents(trips):
                             "mu": DT_MU,
                         },
                     },
+                },
+            }
+        elif DEPARTURE_TIME_MODEL == "Discrete":
+            departure_time_model = {
+                "type": "DiscreteChoice",
+                "value": {
+                    "values": DT_BINS,
+                    "choice_model": {
+                        "type": "Deterministic",
+                        "value": {
+                            "u": RNG.uniform(),
+                            "constants": list(RNG.gumbel(scale=DT_MU, size=len(DT_BINS))),
+                        },
+                    },
+                    "offset": RNG.uniform(-DT_WIDTH / 2, DT_WIDTH / 2),
                 },
             }
         else:
